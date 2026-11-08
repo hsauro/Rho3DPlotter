@@ -1,5 +1,7 @@
 # TRho3DPlot — a Skia-backed 3D plotting component for Delphi FireMonkey
 
+This control was developed by Herbert Sauro in collaboration with Claude Code, Anthropic's AI coding assistant.
+
 An interactive 3D plotting control for RAD Studio **FireMonkey (FMX)**, rendered
 with the **Skia** backend. `TRho3DPlot` draws parametric curves (Lorenz, Rössler
 and Chua attractors), 3D scatter clouds, surfaces `z = f(x, y)` and parametric
