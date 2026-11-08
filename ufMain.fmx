@@ -2,17 +2,18 @@ object frmMain: TfrmMain
   Left = 0
   Top = 0
   Caption = '3D Plotter'
-  ClientHeight = 712
-  ClientWidth = 908
+  ClientHeight = 760
+  ClientWidth = 1040
   Position = MainFormCenter
   FormFactor.Width = 320
   FormFactor.Height = 480
   FormFactor.Devices = [Desktop]
   OnCreate = FormCreate
+  OnShow = FormShow
   DesignerMasterStyle = 0
   object Layout1: TLayout
     Align = Top
-    Size.Width = 908.000000000000000000
+    Size.Width = 1040.000000000000000000
     Size.Height = 50.000000000000000000
     Size.PlatformDefault = False
     TabOrder = 1
@@ -39,14 +40,21 @@ object frmMain: TfrmMain
         'Time Traces'
         'Lorenz vs Rossler'
         'Live Stream'
-        'Scatter Demo')
+        'Scatter Demo'
+        'Surface: sin(r)/r'
+        'Parametric Torus'
+        'Scatter by Value'
+        'Surface + Curve'
+        'Moebius Strip'
+        'Perf: 100k-point curve'
+        'Perf: 200x200 surface')
       ItemIndex = 0
       Margins.Left = 6.000000000000000000
       Margins.Top = 12.000000000000000000
       Margins.Bottom = 12.000000000000000000
       Position.X = 104.000000000000000000
       Position.Y = 12.000000000000000000
-      Size.Width = 150.000000000000000000
+      Size.Width = 180.000000000000000000
       Size.Height = 26.000000000000000000
       Size.PlatformDefault = False
       TabOrder = 1
@@ -55,30 +63,42 @@ object frmMain: TfrmMain
     object chkCube: TCheckBox
       Align = Left
       IsChecked = True
-      Position.X = 254.000000000000000000
-      Size.Width = 60.000000000000000000
+      Margins.Left = 8.000000000000000000
+      Position.X = 292.000000000000000000
+      Size.Width = 56.000000000000000000
       Size.Height = 50.000000000000000000
       Size.PlatformDefault = False
       TabOrder = 2
-      Text = 'Cube'
+      Text = 'Box'
       OnChange = chkCubeChange
     end
     object chkAxes: TCheckBox
       Align = Left
       IsChecked = True
-      Position.X = 314.000000000000000000
-      Size.Width = 60.000000000000000000
+      Position.X = 348.000000000000000000
+      Size.Width = 56.000000000000000000
       Size.Height = 50.000000000000000000
       Size.PlatformDefault = False
       TabOrder = 3
       Text = 'Axes'
       OnChange = chkAxesChange
     end
+    object chkGrid: TCheckBox
+      Align = Left
+      IsChecked = True
+      Position.X = 404.000000000000000000
+      Size.Width = 56.000000000000000000
+      Size.Height = 50.000000000000000000
+      Size.PlatformDefault = False
+      TabOrder = 4
+      Text = 'Grid'
+      OnChange = chkGridChange
+    end
     object chkGradient: TCheckBox
       Align = Left
       IsChecked = True
-      Position.X = 374.000000000000000000
-      Size.Width = 80.000000000000000000
+      Position.X = 460.000000000000000000
+      Size.Width = 76.000000000000000000
       Size.Height = 50.000000000000000000
       Size.PlatformDefault = False
       TabOrder = 5
@@ -87,8 +107,8 @@ object frmMain: TfrmMain
     end
     object chkAutoRotate: TCheckBox
       Align = Left
-      Position.X = 454.000000000000000000
-      Size.Width = 100.000000000000000000
+      Position.X = 536.000000000000000000
+      Size.Width = 90.000000000000000000
       Size.Height = 50.000000000000000000
       Size.PlatformDefault = False
       TabOrder = 6
@@ -97,7 +117,7 @@ object frmMain: TfrmMain
     end
     object lblSpeed: TLabel
       Align = Left
-      Position.X = 554.000000000000000000
+      Position.X = 626.000000000000000000
       Size.Width = 44.000000000000000000
       Size.Height = 50.000000000000000000
       Size.PlatformDefault = False
@@ -110,9 +130,11 @@ object frmMain: TfrmMain
       Max = 90.000000000000000000
       Min = -90.000000000000000000
       Orientation = Horizontal
-      Position.X = 598.000000000000000000
+      Margins.Top = 16.000000000000000000
+      Margins.Bottom = 15.000000000000000000
+      Position.X = 670.000000000000000000
       Position.Y = 16.000000000000000000
-      Size.Width = 140.000000000000000000
+      Size.Width = 120.000000000000000000
       Size.Height = 19.000000000000000000
       Size.PlatformDefault = False
       TabOrder = 7
@@ -125,29 +147,172 @@ object frmMain: TfrmMain
       Max = 6.000000000000000000
       Min = 0.500000000000000000
       Orientation = Horizontal
+      Margins.Top = 16.000000000000000000
       Margins.Right = 10.000000000000000000
-      Position.X = 758.000000000000000000
+      Margins.Bottom = 15.000000000000000000
+      Position.X = 890.000000000000000000
       Position.Y = 16.000000000000000000
       Size.Width = 140.000000000000000000
       Size.Height = 19.000000000000000000
       Size.PlatformDefault = False
-      TabOrder = 4
+      TabOrder = 8
       Value = 1.500000000000000000
       OnChange = trkThicknessChange
+    end
+    object lblWidth: TLabel
+      Align = Right
+      Position.X = 840.000000000000000000
+      Size.Width = 50.000000000000000000
+      Size.Height = 50.000000000000000000
+      Size.PlatformDefault = False
+      TextSettings.VertAlign = Center
+      Text = 'Width'
+    end
+  end
+  object Layout3: TLayout
+    Align = Bottom
+    Position.Y = 660.000000000000000000
+    Size.Width = 1040.000000000000000000
+    Size.Height = 50.000000000000000000
+    Size.PlatformDefault = False
+    TabOrder = 2
+    object cmbView: TComboBox
+      Align = Left
+      Items.Strings = (
+        'View: Isometric'
+        'View: Top'
+        'View: Front'
+        'View: Side')
+      ItemIndex = 0
+      Margins.Left = 8.000000000000000000
+      Margins.Top = 12.000000000000000000
+      Margins.Bottom = 12.000000000000000000
+      Position.X = 8.000000000000000000
+      Position.Y = 12.000000000000000000
+      Size.Width = 120.000000000000000000
+      Size.Height = 26.000000000000000000
+      Size.PlatformDefault = False
+      TabOrder = 0
+      OnChange = cmbViewChange
+    end
+    object chkOrtho: TCheckBox
+      Align = Left
+      Margins.Left = 8.000000000000000000
+      Position.X = 136.000000000000000000
+      Size.Width = 100.000000000000000000
+      Size.Height = 50.000000000000000000
+      Size.PlatformDefault = False
+      TabOrder = 1
+      Text = 'Orthographic'
+      OnChange = chkOrthoChange
+    end
+    object cmbAspect: TComboBox
+      Align = Left
+      Items.Strings = (
+        'Aspect: Fill box'
+        'Aspect: Equal')
+      ItemIndex = 0
+      Margins.Left = 4.000000000000000000
+      Margins.Top = 12.000000000000000000
+      Margins.Bottom = 12.000000000000000000
+      Position.X = 240.000000000000000000
+      Position.Y = 12.000000000000000000
+      Size.Width = 120.000000000000000000
+      Size.Height = 26.000000000000000000
+      Size.PlatformDefault = False
+      TabOrder = 2
+      OnChange = cmbAspectChange
+    end
+    object chkLegend: TCheckBox
+      Align = Left
+      IsChecked = True
+      Margins.Left = 8.000000000000000000
+      Position.X = 368.000000000000000000
+      Size.Width = 70.000000000000000000
+      Size.Height = 50.000000000000000000
+      Size.PlatformDefault = False
+      TabOrder = 3
+      Text = 'Legend'
+      OnChange = chkLegendChange
+    end
+    object btnReveal: TButton
+      Align = Left
+      Margins.Left = 4.000000000000000000
+      Margins.Top = 10.000000000000000000
+      Margins.Bottom = 10.000000000000000000
+      Position.X = 442.000000000000000000
+      Position.Y = 10.000000000000000000
+      Size.Width = 80.000000000000000000
+      Size.Height = 30.000000000000000000
+      Size.PlatformDefault = False
+      TabOrder = 4
+      Text = 'Reveal'
+      OnClick = btnRevealClick
+    end
+    object btnProperties: TButton
+      Align = Left
+      Margins.Left = 4.000000000000000000
+      Margins.Top = 10.000000000000000000
+      Margins.Bottom = 10.000000000000000000
+      Position.X = 526.000000000000000000
+      Position.Y = 10.000000000000000000
+      Size.Width = 86.000000000000000000
+      Size.Height = 30.000000000000000000
+      Size.PlatformDefault = False
+      TabOrder = 5
+      Text = 'Properties...'
+      OnClick = btnPropertiesClick
+    end
+    object btnLoadJson: TButton
+      Align = Right
+      Margins.Right = 8.000000000000000000
+      Margins.Top = 10.000000000000000000
+      Margins.Bottom = 10.000000000000000000
+      Position.X = 952.000000000000000000
+      Position.Y = 10.000000000000000000
+      Size.Width = 80.000000000000000000
+      Size.Height = 30.000000000000000000
+      Size.PlatformDefault = False
+      TabOrder = 7
+      Text = 'Load JSON'
+      OnClick = btnLoadJsonClick
+    end
+    object btnSaveJson: TButton
+      Align = Right
+      Margins.Right = 4.000000000000000000
+      Margins.Top = 10.000000000000000000
+      Margins.Bottom = 10.000000000000000000
+      Position.X = 868.000000000000000000
+      Position.Y = 10.000000000000000000
+      Size.Width = 80.000000000000000000
+      Size.Height = 30.000000000000000000
+      Size.PlatformDefault = False
+      TabOrder = 6
+      Text = 'Save JSON'
+      OnClick = btnSaveJsonClick
+    end
+    object lblInfo: TLabel
+      Align = Client
+      Margins.Left = 8.000000000000000000
+      Size.Width = 248.000000000000000000
+      Size.Height = 50.000000000000000000
+      Size.PlatformDefault = False
+      TextSettings.HorzAlign = Center
+      Text = ''
     end
   end
   object Layout2: TLayout
     Align = Bottom
-    Position.Y = 662.000000000000000000
-    Size.Width = 908.000000000000000000
+    Position.Y = 710.000000000000000000
+    Size.Width = 1040.000000000000000000
     Size.Height = 50.000000000000000000
     Size.PlatformDefault = False
-    TabOrder = 2
-    object cmbBackground: TComboBox
+    TabOrder = 3
+    object cmbTheme: TComboBox
       Align = Left
       Items.Strings = (
-        'Dark'
         'Light'
+        'Dark'
         'Navy')
       ItemIndex = 0
       Margins.Left = 8.000000000000000000
@@ -159,7 +324,7 @@ object frmMain: TfrmMain
       Size.Height = 26.000000000000000000
       Size.PlatformDefault = False
       TabOrder = 0
-      OnChange = cmbBackgroundChange
+      OnChange = cmbThemeChange
     end
     object cmbSource: TComboBox
       Align = Left
@@ -171,9 +336,9 @@ object frmMain: TfrmMain
       Margins.Left = 8.000000000000000000
       Margins.Top = 12.000000000000000000
       Margins.Bottom = 12.000000000000000000
-      Position.X = 136.000000000000000000
+      Position.X = 112.000000000000000000
       Position.Y = 12.000000000000000000
-      Size.Width = 96.000000000000000000
+      Size.Width = 110.000000000000000000
       Size.Height = 26.000000000000000000
       Size.PlatformDefault = False
       TabOrder = 1
@@ -181,8 +346,9 @@ object frmMain: TfrmMain
     end
     object chkRolling: TCheckBox
       Align = Left
-      Position.X = 256.000000000000000000
-      Size.Width = 100.000000000000000000
+      Margins.Left = 8.000000000000000000
+      Position.X = 230.000000000000000000
+      Size.Width = 110.000000000000000000
       Size.Height = 50.000000000000000000
       Size.PlatformDefault = False
       TabOrder = 2
@@ -201,9 +367,9 @@ object frmMain: TfrmMain
       Margins.Left = 4.000000000000000000
       Margins.Top = 12.000000000000000000
       Margins.Bottom = 12.000000000000000000
-      Position.X = 380.000000000000000000
+      Position.X = 344.000000000000000000
       Position.Y = 12.000000000000000000
-      Size.Width = 92.000000000000000000
+      Size.Width = 104.000000000000000000
       Size.Height = 26.000000000000000000
       Size.PlatformDefault = False
       TabOrder = 3
@@ -219,9 +385,9 @@ object frmMain: TfrmMain
       Margins.Left = 6.000000000000000000
       Margins.Top = 12.000000000000000000
       Margins.Bottom = 12.000000000000000000
-      Position.X = 496.000000000000000000
+      Position.X = 454.000000000000000000
       Position.Y = 12.000000000000000000
-      Size.Width = 104.000000000000000000
+      Size.Width = 110.000000000000000000
       Size.Height = 26.000000000000000000
       Size.PlatformDefault = False
       TabOrder = 4
@@ -229,8 +395,9 @@ object frmMain: TfrmMain
     end
     object chkDepth: TCheckBox
       Align = Left
-      Position.X = 632.000000000000000000
-      Size.Width = 110.000000000000000000
+      Margins.Left = 8.000000000000000000
+      Position.X = 572.000000000000000000
+      Size.Width = 120.000000000000000000
       Size.Height = 50.000000000000000000
       Size.PlatformDefault = False
       TabOrder = 5
@@ -240,7 +407,7 @@ object frmMain: TfrmMain
     object chkTransparent: TCheckBox
       Align = Left
       Margins.Left = 4.000000000000000000
-      Position.X = 746.000000000000000000
+      Position.X = 696.000000000000000000
       Size.Width = 120.000000000000000000
       Size.Height = 50.000000000000000000
       Size.PlatformDefault = False
@@ -252,12 +419,12 @@ object frmMain: TfrmMain
       Margins.Right = 8.000000000000000000
       Margins.Top = 10.000000000000000000
       Margins.Bottom = 10.000000000000000000
-      Position.X = 830.000000000000000000
+      Position.X = 962.000000000000000000
       Position.Y = 10.000000000000000000
       Size.Width = 70.000000000000000000
       Size.Height = 30.000000000000000000
       Size.PlatformDefault = False
-      TabOrder = 7
+      TabOrder = 8
       Text = 'Save PDF'
       OnClick = btnSavePdfClick
     end
@@ -266,22 +433,14 @@ object frmMain: TfrmMain
       Margins.Right = 4.000000000000000000
       Margins.Top = 10.000000000000000000
       Margins.Bottom = 10.000000000000000000
-      Position.X = 752.000000000000000000
+      Position.X = 888.000000000000000000
       Position.Y = 10.000000000000000000
       Size.Width = 70.000000000000000000
       Size.Height = 30.000000000000000000
       Size.PlatformDefault = False
-      TabOrder = 8
+      TabOrder = 7
       Text = 'Save PNG'
       OnClick = btnSavePngClick
-    end
-    object lblHint: TLabel
-      Align = Client
-      Size.Width = 10.000000000000000000
-      Size.Height = 50.000000000000000000
-      Size.PlatformDefault = False
-      TextSettings.HorzAlign = Center
-      Text = ''
     end
   end
 end

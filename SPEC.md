@@ -195,3 +195,10 @@ Volume rendering, isosurfaces, 3D vector fields (quiver), lighting with specular
 2. Default theme: keep the dark background, or default to light to match the 2D component and printed figures?
 3. Should the property editor share code with the 2D editor (a common unit), or stay separate to keep the components independent?
 4. Packaging: a run-time and design-time package and palette registration, like the 2D component, or source-only for now?
+
+### Decisions (2026-11-08)
+
+1. Keep `TRho3DPlot`.
+2. Default theme is **light**; `Theme := thDark` gives the previous look.
+3. The property editor is separate (`Rho3DPlotEditor.pas`, built in code, standard FMX controls only), so the 3D component has no dependency on the 2D one or on `LabelTrackBarRuntime`.
+4. Run-time and design-time packages (`Package/Rho3DPlotRuntime`, `Package/Rho3DPlotDesign`), palette page **Rhody Controls**.

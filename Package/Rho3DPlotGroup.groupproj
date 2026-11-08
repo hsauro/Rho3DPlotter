@@ -1,0 +1,60 @@
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+    <PropertyGroup>
+        <ProjectGuid>{5C1E7A0B-3F8D-4D2B-9E61-7A2B9C4D3E11}</ProjectGuid>
+    </PropertyGroup>
+    <ItemGroup>
+        <Projects Include="Rho3DPlotRuntime.dproj">
+            <Dependencies/>
+        </Projects>
+        <Projects Include="Rho3DPlotDesign.dproj">
+            <Dependencies/>
+        </Projects>
+        <Projects Include="..\Plotter3DProject.dproj">
+            <Dependencies/>
+        </Projects>
+    </ItemGroup>
+    <ProjectExtensions>
+        <Borland.Personality>Default.Personality.12</Borland.Personality>
+        <Borland.ProjectType/>
+        <BorlandProject>
+            <Default.Personality/>
+        </BorlandProject>
+    </ProjectExtensions>
+    <Target Name="Rho3DPlotRuntime">
+        <MSBuild Projects="Rho3DPlotRuntime.dproj"/>
+    </Target>
+    <Target Name="Rho3DPlotRuntime:Clean">
+        <MSBuild Projects="Rho3DPlotRuntime.dproj" Targets="Clean"/>
+    </Target>
+    <Target Name="Rho3DPlotRuntime:Make">
+        <MSBuild Projects="Rho3DPlotRuntime.dproj" Targets="Make"/>
+    </Target>
+    <Target Name="Rho3DPlotDesign">
+        <MSBuild Projects="Rho3DPlotDesign.dproj"/>
+    </Target>
+    <Target Name="Rho3DPlotDesign:Clean">
+        <MSBuild Projects="Rho3DPlotDesign.dproj" Targets="Clean"/>
+    </Target>
+    <Target Name="Rho3DPlotDesign:Make">
+        <MSBuild Projects="Rho3DPlotDesign.dproj" Targets="Make"/>
+    </Target>
+    <Target Name="Plotter3DProject">
+        <MSBuild Projects="..\Plotter3DProject.dproj"/>
+    </Target>
+    <Target Name="Plotter3DProject:Clean">
+        <MSBuild Projects="..\Plotter3DProject.dproj" Targets="Clean"/>
+    </Target>
+    <Target Name="Plotter3DProject:Make">
+        <MSBuild Projects="..\Plotter3DProject.dproj" Targets="Make"/>
+    </Target>
+    <Target Name="Build">
+        <CallTarget Targets="Rho3DPlotRuntime;Rho3DPlotDesign;Plotter3DProject"/>
+    </Target>
+    <Target Name="Clean">
+        <CallTarget Targets="Rho3DPlotRuntime:Clean;Rho3DPlotDesign:Clean;Plotter3DProject:Clean"/>
+    </Target>
+    <Target Name="Make">
+        <CallTarget Targets="Rho3DPlotRuntime:Make;Rho3DPlotDesign:Make;Plotter3DProject:Make"/>
+    </Target>
+    <Import Project="$(BDS)\Bin\CodeGear.Group.Targets" Condition="Exists('$(BDS)\Bin\CodeGear.Group.Targets')"/>
+</Project>

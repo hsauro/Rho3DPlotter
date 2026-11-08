@@ -152,6 +152,11 @@
             <Form>frmMain</Form>
             <FormType>fmx</FormType>
         </DCCReference>
+        <DCCReference Include="Rho3DPlot.pas"/>
+        <DCCReference Include="Rho3DTransform.pas"/>
+        <DCCReference Include="Rho3DColorMaps.pas"/>
+        <DCCReference Include="Rho3DJsonUtils.pas"/>
+        <DCCReference Include="Rho3DPlotEditor.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>
         </BuildConfiguration>
