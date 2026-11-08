@@ -1,0 +1,38 @@
+# Delphi build output
+Win32/
+Win64/
+OSX64/
+OSXARM64/
+*.exe
+*.dll
+*.bpl
+*.bpi
+*.dcp
+*.dcu
+*.map
+*.drc
+*.dres
+*.rsm
+*.tds
+*.otares
+*.cfg
+*.hpp
+
+# Delphi local / user-specific files
+*.local
+*.identcache
+*.projdata
+*.tvsconfig
+*.dsk
+*.dsv
+*.stat
+
+# IDE history and backups
+__history/
+__recovery/
+*.~*
+
+# Logs and scratch output
+build.log
+selftest_out/
+.claude/settings.local.json
