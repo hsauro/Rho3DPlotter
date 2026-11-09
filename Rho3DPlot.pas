@@ -548,6 +548,10 @@ type
     /// Vector PDF, page AWidth x AHeight points (0 = on-screen size).
     procedure SaveToPDF(const AFileName: string; AWidth: Integer = 0;
       AHeight: Integer = 0);
+    /// Draws the plot, as it is now (view, zoom, edits), onto any Skia canvas
+    /// (a PDF page, an SVG canvas, a larger bitmap) in ADest, as vectors, as
+    /// SaveToPDF does onto its page.
+    procedure RenderTo(const ACanvas: ISkCanvas; const ADest: TRectF);
     procedure CopyToClipboard;
     /// Render to a raster image (same sizing rules as SaveToPNG).
     function MakeImage(AWidth: Integer = 0; AHeight: Integer = 0;
@@ -3246,6 +3250,22 @@ var
 begin
   image := MakeImage(AWidth, AHeight, ATransparent);
   image.EncodeToFile(AFileName, TSkEncodedImageFormat.PNG);
+end;
+
+procedure TRho3DPlot.RenderTo(const ACanvas: ISkCanvas; const ADest: TRectF);
+begin
+  ACanvas.Save;
+  try
+    // Clipped to ADest, so clearing the background leaves the rest of the
+    // canvas (other charts drawn on it) alone.
+    ACanvas.ClipRect(ADest);
+    ACanvas.Translate(ADest.Left, ADest.Top);
+    RenderScene(ACanvas, TRectF.Create(0, 0, ADest.Width, ADest.Height), FBackgroundColor,
+      False, True);
+  finally
+    ACanvas.Restore;
+  end;
+  Redraw;
 end;
 
 procedure TRho3DPlot.SaveToPDF(const AFileName: string; AWidth, AHeight: Integer);
