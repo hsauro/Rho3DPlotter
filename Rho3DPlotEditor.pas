@@ -242,7 +242,10 @@ var
 begin
   r := Row(AParent, ACaption);
   r.Height := 26;
-  TLabel(r.Children[0]).StyledSettings := [];
+  // Bold, but colour, family and size from the style, so headings follow
+  // light and dark themes.
+  TLabel(r.Children[0]).StyledSettings :=
+    TLabel(r.Children[0]).StyledSettings - [TStyledSetting.Style];
   TLabel(r.Children[0]).TextSettings.Font.Style := [TFontStyle.fsBold];
   TLabel(r.Children[0]).Width := 300;
 end;
