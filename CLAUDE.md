@@ -93,7 +93,8 @@ Y up, Z toward the viewer. Default az −60°, el 30°. Pan is a fraction of
 **Axes**: ticks per render come from `ComputeTicks`: round numbers (`NiceTicks`), or
 the named ticks of `SetTickLabels` (`FTickPos`/`FTickNames`, those inside the
 range copied to `FTicks`/`FTickText`, `FTickStep` their smallest gap for the
-label thinning). Each axis uses the box edge lowest on screen (x, y) or leftmost (z),
+label thinning; named ticks that would need thinning are drawn across the axis instead,
+rotated along u, `across` in `DrawAxis`). Each axis uses the box edge lowest on screen (x, y) or leftmost (z),
 tie-broken toward the viewer; ticks / labels go outward in screen space; labels
 are thinned if they'd overlap; an axis within ~18° of the line of sight is
 skipped.

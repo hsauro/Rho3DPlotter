@@ -3017,7 +3017,8 @@ var
   b, c, ib, ic, bestB, bestC, k, skip: Integer;
   ha, hb, hc, vb, vc: Single;
   s0, s1, m, ctr, e, u, sp, tp: TPointF;
-  score, best, len, spacing, h, ext, maxExt, maxW, dotUE: Single;
+  score, best, len, spacing, h, ext, maxW, dotUE, angle, outer: Single;
+  across, flip: Boolean;
   labels: TArray<string>;
   widths: TArray<Single>;
   axisPaint, textPaint: ISkPaint;
@@ -3087,7 +3088,6 @@ begin
   ACanvas.DrawLine(s0, s1, axisPaint);
 
   h := FFontTick.Size;
-  maxExt := 0;
   SetLength(labels, Length(FTicks[A]));
   SetLength(widths, Length(FTicks[A]));
   maxW := 0;
@@ -3102,12 +3102,30 @@ begin
   end;
   // thin the labels if they would overlap along the edge
   skip := 1;
+  spacing := 0;
   if Length(FTicks[A]) > 1 then
   begin
     spacing := len * FTickStep[A] / (FFrame.Hi[A] - FFrame.Lo[A]);
     if spacing > 0 then
       skip := Max(1, Ceil((maxW * Abs(e.X) + h * Abs(e.Y) + 6) / spacing));
   end;
+  // Named ticks that would have to be thinned are turned to run out from
+  // the axis (across it, along u) instead, where each needs only its height
+  // along the edge, so many more fit. One whose outward direction points
+  // left is turned round, so that it does not read upside down, and ends at
+  // the axis instead.
+  across := (FTickText[A] <> nil) and (skip > 1) and (spacing > 0);
+  angle := 0;
+  flip := False;
+  if across then
+  begin
+    skip := Max(1, Ceil((h + 3) / spacing));
+    angle := RadToDeg(ArcTan2(u.Y, u.X));
+    flip := u.X < 0;
+    if flip then
+      angle := angle + 180;
+  end;
+  outer := 0;   // how far the labels reach out from the axis
   for k := 0 to High(FTicks[A]) do
   begin
     sp := FCam.Project(BoxPoint(A, FFrame.NormAxis(A, FTicks[A][k]), b, vb, c, vc));
@@ -3115,10 +3133,26 @@ begin
       ACanvas.DrawLine(sp, sp + u * 5, axisPaint);
     if FShowValues and (k mod skip = 0) then
     begin
-      ext := Abs(u.X) * widths[k] / 2 + Abs(u.Y) * h / 2;
-      maxExt := Max(maxExt, ext);
-      tp := sp + u * (8 + ext);
-      DrawTextCentered(ACanvas, labels[k], tp, FFontTick, textPaint);
+      if across then
+      begin
+        tp := sp + u * 8;
+        ACanvas.Save;
+        ACanvas.Translate(tp.X, tp.Y);
+        ACanvas.Rotate(angle);
+        if flip then
+          ACanvas.DrawSimpleText(labels[k], -widths[k], h * 0.36, FFontTick, textPaint)
+        else
+          ACanvas.DrawSimpleText(labels[k], 0, h * 0.36, FFontTick, textPaint);
+        ACanvas.Restore;
+        outer := Max(outer, 8 + widths[k]);
+      end
+      else
+      begin
+        ext := Abs(u.X) * widths[k] / 2 + Abs(u.Y) * h / 2;
+        tp := sp + u * (8 + ext);
+        DrawTextCentered(ACanvas, labels[k], tp, FFontTick, textPaint);
+        outer := Max(outer, 8 + 2 * ext);
+      end;
     end;
   end;
   title := GetAxisTitle(A);
@@ -3126,7 +3160,7 @@ begin
   begin
     tw := FFontTitle[A].MeasureText(title);
     ext := Abs(u.X) * tw / 2 + Abs(u.Y) * FFontTitle[A].Size / 2;
-    tp := m + u * (10 + 2 * maxExt + 4 + ext);
+    tp := m + u * (Max(outer, 8) + 6 + ext);
     DrawTextCentered(ACanvas, title, tp, FFontTitle[A], textPaint);
   end;
 end;

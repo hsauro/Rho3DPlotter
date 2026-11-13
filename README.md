@@ -117,8 +117,11 @@ the end it reaches); `ValueAt(i)` its colour value.
 **Named ticks.** `SetTickLabels(Axis, Positions, Labels)` puts a label at each
 data position of axis 0 (x), 1 (y) or 2 (z) in place of the round-number ticks,
 for example category names under bars (`Positions` 1, 2, ...); the grid lines
-follow them, labels that would overlap are thinned as numbers are, and those
-outside the axis range are left out. Empty arrays go back to numbers;
+follow them, and those outside the axis range are left out. Names that would
+not fit side by side are turned to run out from the axis, across it (one whose
+direction points left is turned round so it does not read upside down), where
+each needs only its height; only if even that is not enough is every so many
+left out. The axis title goes beyond the longest name. Empty arrays go back to numbers;
 `HasTickLabels(Axis)` tells which. They are saved with the plot (JSON
 `axes.tickLabelsX/Y/Z`).
 
