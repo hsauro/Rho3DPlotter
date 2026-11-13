@@ -380,6 +380,9 @@ type
     FBatchCount: Integer;
     // fonts for the current render
     FFontTick, FFontChart: ISkFont;
+    // the hover read-out's font: the default tick size, whatever TickFontSize
+    // is, so shrinking the tick labels to fit names leaves it readable
+    FFontHover: ISkFont;
     FFontTitle: array[0..2] of ISkFont;   // the axis titles, x, y, z
 
     procedure RotateTick(Sender: TObject);
@@ -642,8 +645,9 @@ type
     property AspectY: Single index 1 read GetAspectRatio write SetAspectRatio;
     property AspectZ: Single index 2 read GetAspectRatio write SetAspectRatio;
     property ChartTitle: string read FChartTitle write SetChartTitle;
-    /// font sizes in points: tick numbers (also the legend and colour bar,
-    /// 11 by default), each axis title (12.5) and the chart title (15, bold)
+    /// font sizes in points: tick numbers and names (also the legend and
+    /// colour bar, 11 by default; not the hover read-out, which stays at 11),
+    /// each axis title (12.5) and the chart title (15, bold)
     property TickFontSize: Single index 0 read GetFontSize write SetFontSize;
     property AxisTitleFontSizeX: Single index 1 read GetFontSize write SetFontSize;
     property AxisTitleFontSizeY: Single index 2 read GetFontSize write SetFontSize;
@@ -3437,10 +3441,10 @@ begin
   paint.Color := FTextColor;
   ACanvas.DrawCircle(p, 5, paint);
 
-  lh := FFontTick.Size + 4;
+  lh := FFontHover.Size + 4;
   w := 0;
   for i := 0 to High(lines) do
-    w := Max(w, FFontTick.MeasureText(lines[i]));
+    w := Max(w, FFontHover.MeasureText(lines[i]));
   w := w + 12;
   h := Length(lines) * lh + 8;
   box := TRectF.Create(p.X + 12, p.Y + 12, p.X + 12 + w, p.Y + 12 + h);
@@ -3461,7 +3465,7 @@ begin
   textPaint.Color := FTextColor;
   for i := 0 to High(lines) do
     ACanvas.DrawSimpleText(lines[i], box.Left + 6, box.Top + 4 + (i + 1) * lh - 4,
-      FFontTick, textPaint);
+      FFontHover, textPaint);
 end;
 
 { ==================================================================== }
@@ -3483,6 +3487,7 @@ begin
   if FFontTick = nil then
   begin
     FFontTick := TSkFont.Create(nil, FTickFontSize);
+    FFontHover := TSkFont.Create(nil, 11);
     for a := 0 to 2 do
       FFontTitle[a] := TSkFont.Create(nil, FAxisTitleFontSize[a]);
     FFontChart := TSkFont.Create(TSkTypeface.MakeFromName('', TSkFontStyle.Bold),
