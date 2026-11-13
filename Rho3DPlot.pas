@@ -291,6 +291,11 @@ type
     FCam: TRho3DCamera;
     FTicks: array[0..2] of TArray<Double>;
     FTickStep: array[0..2] of Double;
+    // named ticks per axis (SetTickLabels): data positions and labels; none =
+    // round-number ticks. FTickText: the labels of FTicks in this render.
+    FTickPos: array[0..2] of TArray<Double>;
+    FTickNames: array[0..2] of TArray<string>;
+    FTickText: array[0..2] of TArray<string>;
     FBoxBack: array[0..2, 0..1] of Boolean;
     FLightVec: TPoint3D;
     // screen state captured on the last on-screen render
@@ -468,6 +473,7 @@ type
     procedure SetShowValues(const Value: Boolean);
     procedure SetShowGrid(const Value: Boolean);
     procedure SetTickCount(const Value: Integer);
+    procedure ComputeTicks(A: Integer);
     procedure SetCubeColor(const Value: TAlphaColor);
     procedure SetAxisColor(const Value: TAlphaColor);
     procedure SetTextColor(const Value: TAlphaColor);
@@ -548,6 +554,15 @@ type
     procedure SetDataBounds(const AMin, AMax: TPoint3D);
     /// Resume automatic scaling to fit the data (also clears fixed limits).
     procedure AutoScale;
+    /// Named ticks on axis AAxis (0 = x, 1 = y, 2 = z): ALabels[k] at the data
+    /// position APositions[k], drawn in place of the round-number ticks (the
+    /// grid lines follow them), for example category names under bars.
+    /// Positions outside the axis range are not drawn. Empty arrays go back
+    /// to round-number ticks.
+    procedure SetTickLabels(AAxis: Integer; const APositions: array of Double;
+      const ALabels: array of string);
+    /// Whether axis AAxis has named ticks.
+    function HasTickLabels(AAxis: Integer): Boolean;
     /// Resolved data range of the box on axis 0..2 (after limits).
     function AxisRange(AAxis: Integer; out ALo, AHi: Double): Boolean;
     /// Resolved colour range.
@@ -710,6 +725,8 @@ const
   ThemeNames: array[TRho3DTheme] of string = ('light', 'dark');
   LegendLocationNames: array[TRho3DLegendLocation] of string =
     ('topRight', 'topLeft', 'bottomRight', 'bottomLeft');
+  /// the keys of the axes' named ticks in SaveToJson
+  TickLabelKeys: array[0..2] of string = ('tickLabelsX', 'tickLabelsY', 'tickLabelsZ');
   ViewPresetNames: array[TRho3DViewPreset] of string =
     ('isometric', 'top', 'front', 'side');
 
@@ -3076,7 +3093,10 @@ begin
   maxW := 0;
   for k := 0 to High(FTicks[A]) do
   begin
-    labels[k] := FormatTick(FTicks[A][k], FTickStep[A]);
+    if FTickText[A] <> nil then
+      labels[k] := FTickText[A][k]
+    else
+      labels[k] := FormatTick(FTicks[A][k], FTickStep[A]);
     widths[k] := FFontTick.MeasureText(labels[k]);
     maxW := Max(maxW, widths[k]);
   end;
@@ -3454,7 +3474,7 @@ begin
   lel := FLightElevation * Pi / 180;
   FLightVec := TPoint3D.Create(Sin(laz) * Cos(lel), Sin(lel), Cos(laz) * Cos(lel));
   for a := 0 to 2 do
-    FTicks[a] := NiceTicks(FFrame.Lo[a], FFrame.Hi[a], FTickCount, FTickStep[a]);
+    ComputeTicks(a);
 
   for s in FSeries do
     if s.FVisible then
@@ -3649,9 +3669,10 @@ end;
 
 function TRho3DPlot.SaveToJson: TJSONObject;
 var
-  o, ser: TJSONObject;
-  arr: TJSONArray;
+  o, ser, t: TJSONObject;
+  arr, names: TJSONArray;
   s: TRho3DSeries;
+  i, k: Integer;
 begin
   Result := TJSONObject.Create;
   try
@@ -3704,6 +3725,17 @@ begin
     begin
       JPutVector(o, 'fixedMin', [FFixedMin.X, FFixedMin.Y, FFixedMin.Z]);
       JPutVector(o, 'fixedMax', [FFixedMax.X, FFixedMax.Y, FFixedMax.Z]);
+    end;
+    // named ticks: {positions, labels} per axis, empty for round numbers
+    for i := 0 to 2 do
+    begin
+      t := TJSONObject.Create;
+      o.AddPair(TickLabelKeys[i], t);
+      JPutVector(t, 'positions', FTickPos[i]);
+      names := TJSONArray.Create;
+      for k := 0 to High(FTickNames[i]) do
+        names.Add(FTickNames[i][k]);
+      t.AddPair('labels', names);
     end;
 
     o := TJSONObject.Create;
@@ -3760,10 +3792,11 @@ end;
 
 procedure TRho3DPlot.LoadFromJson(const AObj: TJSONObject);
 var
-  o: TJSONObject;
+  o, t: TJSONObject;
   arr: TJSONArray;
   v: TArray<Double>;
-  i: Integer;
+  lbls: TArray<string>;
+  i, k: Integer;
   s: TRho3DSeries;
 begin
   if AObj = nil then
@@ -3832,6 +3865,23 @@ begin
     if Length(v) = 3 then FFixedMin := TPoint3D.Create(v[0], v[1], v[2]);
     v := JVector(o, 'fixedMax');
     if Length(v) = 3 then FFixedMax := TPoint3D.Create(v[0], v[1], v[2]);
+  end;
+  for i := 0 to 2 do
+  begin
+    t := JObj(o, TickLabelKeys[i]);
+    if t <> nil then
+    begin
+      v := JVector(t, 'positions');
+      lbls := nil;
+      if t.GetValue('labels') is TJSONArray then
+        for k := 0 to TJSONArray(t.GetValue('labels')).Count - 1 do
+          lbls := lbls + [TJSONArray(t.GetValue('labels')).Items[k].Value];
+      if Length(lbls) = Length(v) then
+      begin
+        FTickPos[i] := v;
+        FTickNames[i] := lbls;
+      end;
+    end;
   end;
 
   o := JObj(AObj, 'colorBar');
@@ -4422,6 +4472,73 @@ begin
     FTickCount := Value;
     Redraw;
   end;
+end;
+
+procedure TRho3DPlot.SetTickLabels(AAxis: Integer; const APositions: array of Double;
+  const ALabels: array of string);
+var
+  k: Integer;
+begin
+  if (AAxis < 0) or (AAxis > 2) then
+    raise EArgumentException.Create('SetTickLabels: the axis is 0, 1 or 2');
+  if Length(APositions) <> Length(ALabels) then
+    raise EArgumentException.Create('SetTickLabels: one label per position');
+  SetLength(FTickPos[AAxis], Length(APositions));
+  SetLength(FTickNames[AAxis], Length(ALabels));
+  for k := 0 to High(APositions) do
+  begin
+    FTickPos[AAxis][k] := APositions[k];
+    FTickNames[AAxis][k] := ALabels[k];
+  end;
+  Redraw;
+end;
+
+function TRho3DPlot.HasTickLabels(AAxis: Integer): Boolean;
+begin
+  Result := (AAxis >= 0) and (AAxis <= 2) and (Length(FTickPos[AAxis]) > 0);
+end;
+
+// The ticks of axis A for this render: round numbers, or the named ticks
+// inside the axis range (FTickText their labels, FTickStep their smallest
+// gap, which the label thinning uses).
+procedure TRho3DPlot.ComputeTicks(A: Integer);
+var
+  k, n: Integer;
+  lo, hi, tol, gap: Double;
+  sorted: TArray<Double>;
+begin
+  if Length(FTickPos[A]) = 0 then
+  begin
+    FTicks[A] := NiceTicks(FFrame.Lo[A], FFrame.Hi[A], FTickCount, FTickStep[A]);
+    FTickText[A] := nil;
+    Exit;
+  end;
+  lo := FFrame.Lo[A];
+  hi := FFrame.Hi[A];
+  tol := (hi - lo) * 1E-9;
+  SetLength(FTicks[A], Length(FTickPos[A]));
+  SetLength(FTickText[A], Length(FTickPos[A]));
+  n := 0;
+  for k := 0 to High(FTickPos[A]) do
+    if (FTickPos[A][k] >= lo - tol) and (FTickPos[A][k] <= hi + tol) then
+    begin
+      FTicks[A][n] := FTickPos[A][k];
+      FTickText[A][n] := FTickNames[A][k];
+      Inc(n);
+    end;
+  SetLength(FTicks[A], n);
+  SetLength(FTickText[A], n);
+  sorted := Copy(FTicks[A]);
+  TArray.Sort<Double>(sorted);
+  FTickStep[A] := 0;
+  for k := 1 to High(sorted) do
+  begin
+    gap := sorted[k] - sorted[k - 1];
+    if (gap > 0) and ((FTickStep[A] = 0) or (gap < FTickStep[A])) then
+      FTickStep[A] := gap;
+  end;
+  if FTickStep[A] = 0 then
+    FTickStep[A] := hi - lo;
 end;
 
 procedure TRho3DPlot.SetCubeColor(const Value: TAlphaColor);

@@ -114,6 +114,14 @@ After editing `Points` directly, call `Series.Changed`. `PointAt(i)` returns a
 point's data coordinates (surfaces and bars: `i = row * Cols + col`, for a bar
 the end it reaches); `ValueAt(i)` its colour value.
 
+**Named ticks.** `SetTickLabels(Axis, Positions, Labels)` puts a label at each
+data position of axis 0 (x), 1 (y) or 2 (z) in place of the round-number ticks,
+for example category names under bars (`Positions` 1, 2, ...); the grid lines
+follow them, labels that would overlap are thinned as numbers are, and those
+outside the axis range are left out. Empty arrays go back to numbers;
+`HasTickLabels(Axis)` tells which. They are saved with the plot (JSON
+`axes.tickLabelsX/Y/Z`).
+
 **Bars.** `BarWidth` (0..1, default 0.8) is each bar's width as a fraction of the
 grid spacing: the smallest gap between neighbouring `X` values, and `Y` values
 (1 for a single row or column). Bars are coloured by height through `ColorMap`
