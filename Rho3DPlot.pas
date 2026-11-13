@@ -310,6 +310,9 @@ type
     FPaneColor: TAlphaColor;
     FAxisTitleX, FAxisTitleY, FAxisTitleZ: string;
     FChartTitle: string;
+    // font sizes in points: tick numbers (also legend and colour bar), axis
+    // titles, chart title
+    FTickFontSize, FAxisTitleFontSize, FChartTitleFontSize: Single;
     FShowColorBar: Boolean;
     FColorBarTitle: string;
     FLightAzimuth, FLightElevation, FAmbient: Single;
@@ -454,6 +457,8 @@ type
     procedure SetAxisTitle(Index: Integer; const Value: string);
     function GetAxisTitle(Index: Integer): string;
     procedure SetChartTitle(const Value: string);
+    function GetFontSize(Index: Integer): Single;
+    procedure SetFontSize(Index: Integer; const Value: Single);
     procedure SetShowColorBar(const Value: Boolean);
     procedure SetColorBarTitle(const Value: string);
     procedure SetLightAzimuth(const Value: Single);
@@ -597,6 +602,11 @@ type
     property AspectY: Single index 1 read GetAspectRatio write SetAspectRatio;
     property AspectZ: Single index 2 read GetAspectRatio write SetAspectRatio;
     property ChartTitle: string read FChartTitle write SetChartTitle;
+    /// font sizes in points: tick numbers (also the legend and colour bar,
+    /// 11 by default), axis titles (12.5) and the chart title (15, bold)
+    property TickFontSize: Single index 0 read GetFontSize write SetFontSize;
+    property AxisTitleFontSize: Single index 1 read GetFontSize write SetFontSize;
+    property ChartTitleFontSize: Single index 2 read GetFontSize write SetFontSize;
     property ShowCube: Boolean read FShowCube write SetShowCube default True;
     property ShowAxes: Boolean read FShowAxes write SetShowAxes default True;
     property ShowTicks: Boolean read FShowTicks write SetShowTicks default True;
@@ -1260,6 +1270,9 @@ begin
   FShowValues := True;
   FShowGrid := True;
   FTickCount := 5;
+  FTickFontSize := 11;
+  FAxisTitleFontSize := 12.5;
+  FChartTitleFontSize := 15;
   FTheme := thLight;
   FCubeColor := DefaultCubeColor;
   FAxisColor := DefaultAxisColor;
@@ -3015,7 +3028,7 @@ begin
   paint.AntiAlias := True;
   paint.Color := FTextColor;
   DrawTextCentered(ACanvas, FChartTitle,
-    PointF(ADest.CenterPoint.X, ADest.Top + 16), FFontChart, paint);
+    PointF(ADest.CenterPoint.X, ADest.Top + FChartTitleFontSize + 1), FFontChart, paint);
 end;
 
 procedure TRho3DPlot.DrawHover(const ACanvas: ISkCanvas; const ADest: TRectF);
@@ -3103,14 +3116,15 @@ begin
 
   if FFontTick = nil then
   begin
-    FFontTick := TSkFont.Create(nil, 11);
-    FFontTitle := TSkFont.Create(nil, 12.5);
-    FFontChart := TSkFont.Create(TSkTypeface.MakeFromName('', TSkFontStyle.Bold), 15);
+    FFontTick := TSkFont.Create(nil, FTickFontSize);
+    FFontTitle := TSkFont.Create(nil, FAxisTitleFontSize);
+    FFontChart := TSkFont.Create(TSkTypeface.MakeFromName('', TSkFontStyle.Bold),
+      FChartTitleFontSize);
   end;
 
   plotRect := ADest;
   if FChartTitle <> '' then
-    plotRect.Top := plotRect.Top + 30;
+    plotRect.Top := plotRect.Top + Max(30, 2 * FChartTitleFontSize);
   cbSeries := ColorBarSeries;
   if cbSeries <> nil then
     plotRect.Right := plotRect.Right - 80;
@@ -3343,6 +3357,9 @@ begin
     o := TJSONObject.Create;
     Result.AddPair('chart', o);
     JPutStr(o, 'title', FChartTitle);
+    JPutFloat(o, 'tickFontSize', FTickFontSize);
+    JPutFloat(o, 'axisTitleFontSize', FAxisTitleFontSize);
+    JPutFloat(o, 'titleFontSize', FChartTitleFontSize);
     JPutStr(o, 'theme', ThemeNames[FTheme]);
     JPutColor(o, 'background', FBackgroundColor);
     JPutColor(o, 'box', FCubeColor);
@@ -3450,6 +3467,12 @@ begin
 
   o := JObj(AObj, 'chart');
   FChartTitle := JStr(o, 'title', FChartTitle);
+  FTickFontSize := JFloat(o, 'tickFontSize', FTickFontSize);
+  FAxisTitleFontSize := JFloat(o, 'axisTitleFontSize', FAxisTitleFontSize);
+  FChartTitleFontSize := JFloat(o, 'titleFontSize', FChartTitleFontSize);
+  FFontTick := nil;
+  FFontTitle := nil;
+  FFontChart := nil;
   FTheme := TRho3DTheme(NameIndex(ThemeNames, JStr(o, 'theme', ''), Ord(FTheme)));
   FBackgroundColor := JColor(o, 'background', FBackgroundColor);
   FCubeColor := JColor(o, 'box', FCubeColor);
@@ -4133,6 +4156,33 @@ end;
 procedure TRho3DPlot.SetChartTitle(const Value: string);
 begin
   if FChartTitle <> Value then begin FChartTitle := Value; Redraw; end;
+end;
+
+function TRho3DPlot.GetFontSize(Index: Integer): Single;
+begin
+  case Index of
+    0: Result := FTickFontSize;
+    1: Result := FAxisTitleFontSize;
+  else
+    Result := FChartTitleFontSize;
+  end;
+end;
+
+procedure TRho3DPlot.SetFontSize(Index: Integer; const Value: Single);
+begin
+  if not (Value > 0) or (Value = GetFontSize(Index)) then
+    Exit;
+  case Index of
+    0: FTickFontSize := Value;
+    1: FAxisTitleFontSize := Value;
+  else
+    FChartTitleFontSize := Value;
+  end;
+  // the fonts are made again, at the new sizes, by the next render
+  FFontTick := nil;
+  FFontTitle := nil;
+  FFontChart := nil;
+  Redraw;
 end;
 
 procedure TRho3DPlot.SetShowColorBar(const Value: Boolean);
