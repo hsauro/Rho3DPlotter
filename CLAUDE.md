@@ -67,15 +67,21 @@ screen, `MakeImage` / `SaveToPNG` / `CopyToClipboard` and `SaveToPDF`
    override) → `PrepareSeries`: box-space `FNorm` (NaN = gap / hole / clipped),
    per-point `FPtColor` (opacity baked in; gradients quantised to 256 steps so
    long runs share a colour), surface faces `FFaces` + coarse `FCoarseFaces`
-   (base colour + unit normal).
+   (base colour + unit normal). Bars (`PrepareBars`): `FNorm` holds one point
+   per bar first (the centre of the end it reaches, so hover / picking index
+   bars as surfaces index vertices), then 8 corners per bar at `n + 8 b + k`
+   (bit 0 of k = high x, bit 1 = high y, bit 2 = high z); `FFaces` six faces per
+   bar shown, in a row, with outward normals.
 2. Per frame: `FCam.Prepare(plotRect)`, `TransformSeries` → `FScr` / `FDepth`
    (view Z, larger = nearer) and the reveal head.
-3. `BuildItems` → one list of faces, curve chunks and markers keyed by depth;
+3. `BuildItems` → one list of faces, curve chunks, markers and bars (`dkBar`, one
+   item per bar, keyed by where it stands: `BarKey`) keyed by depth;
    `SortOrder` (own quicksort on an index array). Curves are one item when no
    surface is visible, otherwise chunked (≤ `MaxCurveItems` total).
 4. `DrawScene`: faces as AA paths (fill + seam stroke, or edges), or — when
    > `BatchFaceThreshold` faces and not PDF — appended to a triangle batch
-   flushed with `DrawVertices` (edges as thin quads); curve chunks as one
+   flushed with `DrawVertices` (edges as thin quads); a bar as its faces turned
+   to the viewer (`FacesViewer`; far faces first when translucent); curve chunks as one
    stroked path per colour run (`DrawCurveChunk`); markers. Around it:
    `DrawBoxBack` (panes + grid on back faces), box edges split back / front by
    `ComputeBoxFacing`, `DrawAxis` ×3, colour bar, legend, title, hover.

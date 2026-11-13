@@ -40,6 +40,7 @@ See `CLAUDE.md` in this folder for its architecture, build commands and Skia API
 | Scatter | Points `(x, y, z)` | Marker shape (circle, square, diamond, triangle, cross), size; per-point colour from a value |
 | Surface | Grid vectors `X[j]`, `Y[i]` and matrix `Z[i, j]` | `z = f(x, y)`; NaN in `Z` leaves a hole (faces touching it are skipped) |
 | Parametric surface | Matrices `X[i, j]`, `Y[i, j]`, `Z[i, j]` over a `(u, v)` grid | Spheres, tori, Möbius strips; may close on itself |
+| Bars (added 2026-11-13) | Grid vectors `X[j]`, `Y[i]` and matrix `Z[i, j]` | A box at each grid point from 0 to `Z[i, j]` (down for a negative value), `BarWidth` of the grid spacing; NaN leaves no bar |
 
 A plot can hold several series of any kinds together (for example a surface with a trajectory on it).
 
@@ -114,7 +115,7 @@ Names are suggestions; keep the existing ones where they already exist.
 
 ```pascal
 type
-  TRho3DSeriesKind = (skCurve, skScatter, skSurface, skParametricSurface);
+  TRho3DSeriesKind = (skCurve, skScatter, skSurface, skParametricSurface, skBars);
   TRho3DFillMode   = (fmFilled, fmWireframe, fmFilledWithEdges);
   TRho3DColorMap   = (cmViridis, cmPlasma, cmCoolwarm, cmGray, cmJet);
   TRho3DProjection = (ppPerspective, ppOrthographic);
@@ -130,6 +131,9 @@ type
     // surfaces
     procedure SetSurface(const X, Y: array of Double; const Z: TArray<TArray<Double>>);
     procedure SetParametricSurface(const X, Y, Z: TArray<TArray<Double>>);
+    procedure SetBars(const X, Y: array of Double; const Z: TArray<TArray<Double>>;
+      const AWidth: Single = 0.8);
+    property BarWidth: Single;                      // fraction of the grid spacing
     procedure SetValues(const C: TArray<TArray<Double>>);   // optional colour values
     property FillMode: TRho3DFillMode;
     property EdgeColor: TAlphaColor;
@@ -139,6 +143,8 @@ type
 
   TRho3DPlot = class(TSkCustomControl)
     function AddSurface(const X, Y: array of Double; const Z: TArray<TArray<Double>>): TRho3DSeries;
+    function AddBars(const X, Y: array of Double; const Z: TArray<TArray<Double>>;
+      const AWidth: Single = 0.8): TRho3DSeries;
     function AddCurve(const X, Y, Z: array of Double): TRho3DSeries;
     function AddScatter(const X, Y, Z: array of Double): TRho3DSeries;
     procedure SetView(AAzimuth, AElevation: Single);
@@ -164,7 +170,7 @@ type
 
 1. **Prepare** (on data change): normalise every point to the unit cube under the aspect mode; build faces for surfaces (two triangles or one quad per grid cell, skipping NaN corners), their colour-map values, and normals.
 2. **Transform** (on view change): rotate and project every point; compute each face's and segment's depth (mean of its corners).
-3. **Sort**: one list of drawables (faces, curve segments, points) by depth, far to near.
+3. **Sort**: one list of drawables (faces, curve segments, points) by depth, far to near. A bar is one drawable, keyed by where it stands (the depth of its foot on the base plane; with perspective, its distance from the eye across the ground): bars stand on one plane and never overlap there, so whole bars in that order hide each other correctly, where their faces sorted one by one would not. Each bar draws only its faces turned towards the viewer (a translucent one draws its far faces first).
 4. **Draw**: back box faces and grid planes, then the drawables in order (applying shading and opacity), then the front box edges, axes, ticks and labels, colour bar, legend, title.
 5. **Export** goes through the same path with a different canvas and size.
 

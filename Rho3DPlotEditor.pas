@@ -353,7 +353,7 @@ begin
   chkSPoints := AddCheck(pg, 'Show markers');
   cmbSMarker := AddCombo(pg, 'Marker', ['Circle', 'Square', 'Diamond', 'Triangle', 'Cross']);
   edtSPointSize := AddEdit(pg, 'Marker size');
-  AddHeading(pg, 'Surface');
+  AddHeading(pg, 'Surface and bars');
   cmbSFill := AddCombo(pg, 'Fill mode', ['Filled', 'Wireframe', 'Filled with edges']);
   colSEdge := AddColor(pg, 'Edge colour');
   edtSEdgeWidth := AddEdit(pg, 'Edge width');

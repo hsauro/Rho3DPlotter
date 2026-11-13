@@ -8,6 +8,8 @@ unit Rho3DPlot;
     * skScatter            markers at (x, y, z), optionally coloured by a value
     * skSurface            z = f(x, y) over a grid X[j], Y[i], Z[i][j]
     * skParametricSurface  matrices X[i][j], Y[i][j], Z[i][j] over a (u, v) grid
+    * skBars               a bar at each grid point (X[j], Y[i]) from 0 to
+                           Z[i][j] (down for negative heights)
 
   Rendering pipeline (see SPEC.md section 5):
     1. Prepare (on data / style change): data bounds, box shape (aspect),
@@ -46,7 +48,7 @@ uses
   Rho3DColorMaps;
 
 type
-  TRho3DSeriesKind = (skCurve, skScatter, skSurface, skParametricSurface);
+  TRho3DSeriesKind = (skCurve, skScatter, skSurface, skParametricSurface, skBars);
   TRho3DFillMode   = (fmFilled, fmWireframe, fmFilledWithEdges);
   TRho3DMarker     = (mkCircle, mkSquare, mkDiamond, mkTriangle, mkCross);
   TRho3DViewPreset = (vpIsometric, vpTop, vpFront, vpSide);
@@ -99,9 +101,10 @@ type
     FPoints: TList<TPoint3D>;
     FValues: TList<Double>;
     FRows, FCols: Integer;
-    FGridX, FGridY: TArray<Double>;          // skSurface: X[j], Y[i]
-    FSurfX, FSurfY, FSurfZ: TRho3DMatrix;    // both surface kinds: [i][j]
+    FGridX, FGridY: TArray<Double>;          // skSurface, skBars: X[j], Y[i]
+    FSurfX, FSurfY, FSurfZ: TRho3DMatrix;    // surfaces and bars: [i][j]
     FSurfC: TRho3DMatrix;                    // optional colour values
+    FBarWidth: Single;                       // skBars: fraction of the spacing
     FTitle: string;
     FColor: TAlphaColor;
     FGradientStartColor: TAlphaColor;
@@ -153,8 +156,11 @@ type
     procedure SetShaded(const Value: Boolean);
     procedure SetKind(const Value: TRho3DSeriesKind);
     procedure SetTitle(const Value: string);
+    procedure SetBarWidth(const Value: Single);
+    procedure SetGrid(const X, Y: array of Double; const Z: TRho3DMatrix);
     function GetCount: Integer;
     function GetIsSurface: Boolean;
+    function GetIsBars: Boolean;
     function ColorValueAt(AIndex: Integer): Double;
   public
     constructor Create(AOwner: TRho3DPlot);
@@ -176,7 +182,13 @@ type
     procedure SetSurface(const X, Y: array of Double; const Z: TRho3DMatrix);
     /// Parametric surface: X[i][j], Y[i][j], Z[i][j] (all the same shape).
     procedure SetParametricSurface(const X, Y, Z: TRho3DMatrix);
-    /// Data coordinates of point / vertex AIndex (surfaces: i * Cols + j).
+    /// 3D bars: a bar centred on (X[j], Y[i]) from 0 to Z[i][j] (down for a
+    /// negative height; NaN = no bar). AWidth is each bar's width as a
+    /// fraction (0..1] of the spacing of X and of Y.
+    procedure SetBars(const X, Y: array of Double; const Z: TRho3DMatrix;
+      const AWidth: Single = 0.8);
+    /// Data coordinates of point / vertex AIndex (surfaces: i * Cols + j;
+    /// bars: the end of bar i * Cols + j).
     function PointAt(AIndex: Integer): TRho3DDataPoint;
     /// Colour value at AIndex (NaN if none).
     function ValueAt(AIndex: Integer): Double;
@@ -188,9 +200,12 @@ type
 
     property Kind: TRho3DSeriesKind read FKind write SetKind;
     property IsSurface: Boolean read GetIsSurface;
+    property IsBars: Boolean read GetIsBars;
+    /// skBars: each bar's width as a fraction (0..1] of the grid spacing
+    property BarWidth: Single read FBarWidth write SetBarWidth;
     property Points: TList<TPoint3D> read FPoints;
     property Values: TList<Double> read FValues;
-    /// number of points (curve / scatter) or vertices (surface)
+    /// number of points (curve / scatter), vertices (surface) or bars
     property Count: Integer read GetCount;
     property Rows: Integer read FRows;
     property Cols: Integer read FCols;
@@ -251,7 +266,8 @@ type
     /// max curve chunks in the depth sort when surfaces are present
     MaxCurveItems = 12000;
   private type
-    TDrawKind = (dkFace, dkCurve, dkMarker);
+    // dkBar: one bar, its six faces from FFaces[Index] on
+    TDrawKind = (dkFace, dkCurve, dkMarker, dkBar);
     TDrawItem = record
       Series: Integer;
       Kind: TDrawKind;
@@ -370,6 +386,8 @@ type
     procedure PrepareSeries(S: TRho3DSeries);
     procedure BuildFaces(S: TRho3DSeries; const AVal: TArray<Double>;
       AStride: Integer; out AFaces: TArray<TRho3DFace>);
+    procedure PrepareBars(S: TRho3DSeries);
+    function FacesViewer(S: TRho3DSeries; const F: TRho3DFace): Boolean;
     function MapColor(S: TRho3DSeries; const V: Double): TAlphaColor;
     // transform / draw
     procedure TransformSeries(S: TRho3DSeries);
@@ -511,6 +529,11 @@ type
     function AddSurface(const X, Y: array of Double; const Z: TRho3DMatrix): TRho3DSeries;
     /// Add a parametric surface from X[i][j], Y[i][j], Z[i][j].
     function AddParametricSurface(const X, Y, Z: TRho3DMatrix): TRho3DSeries;
+    /// Add 3D bars: a bar centred on (X[j], Y[i]) from 0 to Z[i][j] (down for
+    /// a negative height), coloured by height through the colour map, shaded,
+    /// with edges. AWidth: each bar's width as a fraction of the grid spacing.
+    function AddBars(const X, Y: array of Double; const Z: TRho3DMatrix;
+      const AWidth: Single = 0.8): TRho3DSeries;
     procedure DeleteSeries(AIndex: Integer);
     /// Replace all data with a single curve through the given columns.
     procedure SetPlotData(const AX, AY, AZ: array of Double); overload;
@@ -676,7 +699,7 @@ type
 
 const
   SeriesKindNames: array[TRho3DSeriesKind] of string =
-    ('curve', 'scatter', 'surface', 'parametricSurface');
+    ('curve', 'scatter', 'surface', 'parametricSurface', 'bars');
   FillModeNames: array[TRho3DFillMode] of string =
     ('filled', 'wireframe', 'filledWithEdges');
   MarkerNames: array[TRho3DMarker] of string =
@@ -756,6 +779,32 @@ begin
     Result[i] := Copy(M[i]);
 end;
 
+// The distance between neighbouring bar centres: the smallest gap between
+// distinct values of C, or 1 when there is none (a single row or column).
+function BarSpacing(const C: TArray<Double>): Double;
+var
+  s: TArray<Double>;
+  k: Integer;
+  d: Double;
+begin
+  Result := 0;
+  s := Copy(C);
+  TArray.Sort<Double>(s);
+  for k := 1 to High(s) do
+  begin
+    d := s[k] - s[k - 1];
+    if (d > 0) and not IsInfinite(d) and ((Result = 0) or (d < Result)) then
+      Result := d;
+  end;
+  if Result = 0 then
+    Result := 1;
+end;
+
+function FiniteValue(const V: Double): Boolean; inline;
+begin
+  Result := not (IsNan(V) or IsInfinite(V));
+end;
+
 { ==================================================================== }
 { TRho3DSeries                                                          }
 { ==================================================================== }
@@ -783,6 +832,7 @@ begin
   FFillMode := fmFilledWithEdges;
   FEdgeColor := TRho3DPlot.DefaultEdgeColor;
   FEdgeWidth := 0.5;
+  FBarWidth := 0.8;
 end;
 
 destructor TRho3DSeries.Destroy;
@@ -800,7 +850,7 @@ end;
 
 function TRho3DSeries.GetCount: Integer;
 begin
-  if IsSurface then
+  if IsSurface or IsBars then
     Result := FRows * FCols
   else
     Result := FPoints.Count;
@@ -811,9 +861,14 @@ begin
   Result := FKind in [skSurface, skParametricSurface];
 end;
 
+function TRho3DSeries.GetIsBars: Boolean;
+begin
+  Result := FKind = skBars;
+end;
+
 function TRho3DSeries.HasValues: Boolean;
 begin
-  if IsSurface then
+  if IsSurface or IsBars then
     Result := FRows > 0
   else
     Result := FValues.Count > 0;
@@ -829,7 +884,7 @@ var
   i, j: Integer;
 begin
   Result := NaN;
-  if IsSurface then
+  if IsSurface or IsBars then
   begin
     if (FCols = 0) or (AIndex < 0) or (AIndex >= FRows * FCols) then Exit;
     i := AIndex div FCols;
@@ -853,7 +908,7 @@ var
   i, j: Integer;
   p: TPoint3D;
 begin
-  if IsSurface then
+  if IsSurface or IsBars then
   begin
     i := AIndex div FCols;
     j := AIndex mod FCols;
@@ -951,16 +1006,34 @@ begin
 end;
 
 procedure TRho3DSeries.SetSurface(const X, Y: array of Double; const Z: TRho3DMatrix);
+begin
+  if (Length(Y) < 2) or (Length(X) < 2) then
+    raise EArgumentException.Create('SetSurface: need at least 2 x 2 grid points');
+  if not MatrixShapeOK(Z, Length(Y), Length(X)) then
+    raise EArgumentException.Create('SetSurface: Z must be Length(Y) rows x Length(X) columns');
+  FKind := skSurface;
+  SetGrid(X, Y, Z);
+end;
+
+procedure TRho3DSeries.SetBars(const X, Y: array of Double; const Z: TRho3DMatrix;
+  const AWidth: Single);
+begin
+  if (Length(Y) < 1) or (Length(X) < 1) then
+    raise EArgumentException.Create('SetBars: need at least one bar');
+  if not MatrixShapeOK(Z, Length(Y), Length(X)) then
+    raise EArgumentException.Create('SetBars: Z must be Length(Y) rows x Length(X) columns');
+  FKind := skBars;
+  FBarWidth := EnsureRange(AWidth, 0.01, 1);
+  SetGrid(X, Y, Z);
+end;
+
+// The grid of a surface or of bars: X[j] (columns), Y[i] (rows), Z[i][j].
+procedure TRho3DSeries.SetGrid(const X, Y: array of Double; const Z: TRho3DMatrix);
 var
   i, j, nr, nc: Integer;
 begin
   nc := Length(X);
   nr := Length(Y);
-  if (nr < 2) or (nc < 2) then
-    raise EArgumentException.Create('SetSurface: need at least 2 x 2 grid points');
-  if not MatrixShapeOK(Z, nr, nc) then
-    raise EArgumentException.Create('SetSurface: Z must be Length(Y) rows x Length(X) columns');
-  FKind := skSurface;
   FRows := nr;
   FCols := nc;
   SetLength(FGridX, nc);
@@ -1029,6 +1102,14 @@ end;
 procedure TRho3DSeries.SetTitle(const Value: string);
 begin
   if FTitle <> Value then begin FTitle := Value; Changed; end;
+end;
+
+procedure TRho3DSeries.SetBarWidth(const Value: Single);
+var
+  v: Single;
+begin
+  v := EnsureRange(Value, 0.01, 1);
+  if FBarWidth <> v then begin FBarWidth := v; Changed; end;
 end;
 
 procedure TRho3DSeries.SetColor(const Value: TAlphaColor);
@@ -1167,13 +1248,15 @@ begin
         if FValues.Count > 0 then
           JPutVector(AObj, 'values', FValues.ToArray);
       end;
-    skSurface:
+    skSurface, skBars:
       begin
         JPutVector(AObj, 'x', FGridX);
         JPutVector(AObj, 'y', FGridY);
         JPutMatrix(AObj, 'z', FSurfZ);
         if FSurfC <> nil then
           JPutMatrix(AObj, 'c', FSurfC);
+        if FKind = skBars then
+          JPutFloat(AObj, 'barWidth', FBarWidth);
       end;
     skParametricSurface:
       begin
@@ -1230,6 +1313,15 @@ begin
         xs := JVector(AObj, 'x');
         ys := JVector(AObj, 'y');
         SetSurface(xs, ys, JMatrix(AObj, 'z'));
+        c := JMatrix(AObj, 'c');
+        if c <> nil then
+          SetValues(c);
+      end;
+    skBars:
+      begin
+        xs := JVector(AObj, 'x');
+        ys := JVector(AObj, 'y');
+        SetBars(xs, ys, JMatrix(AObj, 'z'), JFloat(AObj, 'barWidth', FBarWidth));
         c := JMatrix(AObj, 'c');
         if c <> nil then
           SetValues(c);
@@ -1567,6 +1659,22 @@ begin
   end;
 end;
 
+function TRho3DPlot.AddBars(const X, Y: array of Double; const Z: TRho3DMatrix;
+  const AWidth: Single): TRho3DSeries;
+begin
+  Result := AddSeries;
+  Result.FUseGradient := False;
+  Result.FColor := PaletteColors[(FSeries.Count - 1) mod Length(PaletteColors)];
+  Result.FColorByValue := True;
+  Result.FShaded := True;   // so the top and the sides of a bar differ
+  try
+    Result.SetBars(X, Y, Z, AWidth);
+  except
+    FSeries.Remove(Result);
+    raise;
+  end;
+end;
+
 procedure TRho3DPlot.DeleteSeries(AIndex: Integer);
 begin
   FSeries.Delete(AIndex);
@@ -1694,6 +1802,7 @@ var
   s: TRho3DSeries;
   i, j, a: Integer;
   p: TPoint3D;
+  hx, hy, z: Double;
 begin
   for a := 0 to 2 do
   begin
@@ -1711,7 +1820,23 @@ begin
   begin
     // every series counts, visible or not, so hiding one never rescales
     for s in FSeries do
-      if s.IsSurface then
+      if s.IsBars then
+      begin
+        // each bar's whole box, from 0 to its height
+        hx := s.FBarWidth * BarSpacing(s.FGridX) / 2;
+        hy := s.FBarWidth * BarSpacing(s.FGridY) / 2;
+        for i := 0 to s.FRows - 1 do
+          for j := 0 to s.FCols - 1 do
+          begin
+            z := s.FSurfZ[i][j];
+            if FiniteValue(z) then
+            begin
+              Acc(s.FGridX[j] - hx, s.FGridY[i] - hy, Min(0, z));
+              Acc(s.FGridX[j] + hx, s.FGridY[i] + hy, Max(0, z));
+            end;
+          end;
+      end
+      else if s.IsSurface then
       begin
         for i := 0 to s.FRows - 1 do
           for j := 0 to s.FCols - 1 do
@@ -1801,7 +1926,9 @@ var
   stride, faces: Integer;
 begin
   mapped := S.IsColorMapped;
-  if S.IsSurface then
+  if S.IsBars then
+    PrepareBars(S)
+  else if S.IsSurface then
   begin
     n := S.FRows * S.FCols;
     SetLength(S.FNorm, n);
@@ -1937,6 +2064,122 @@ begin
   SetLength(AFaces, cnt);
 end;
 
+{ Bars. For n = Rows * Cols bars the vertex arrays hold first one point per
+  bar, the centre of its end (its top, or its bottom when it goes down), so
+  hover and picking find bar i * Cols + j at that index as on a surface; then
+  the eight corners of each bar: corner k of bar b at n + 8 b + k, bit 0 of k
+  choosing the high x, bit 1 the high y, bit 2 the high z. FFaces holds the
+  six faces of each bar shown, six in a row, with outward normals; a bar with
+  a NaN height, or outside clipped limits, has none. }
+procedure TRho3DPlot.PrepareBars(S: TRho3DSeries);
+const
+  // the faces -x, +x, -y, +y, -z, +z: their corners, in order round the face
+  FaceCorners: array[0..5, 0..3] of Integer = ((0, 2, 6, 4), (1, 3, 7, 5),
+    (0, 1, 5, 4), (2, 3, 7, 6), (0, 1, 3, 2), (4, 5, 7, 6));
+  FaceNormals: array[0..5, 0..2] of Single = ((-1, 0, 0), (1, 0, 0),
+    (0, -1, 0), (0, 1, 0), (0, 0, -1), (0, 0, 1));
+var
+  i, j, b, k, n, base, cnt: Integer;
+  hx, hy, z: Double;
+  lo, hi, p: TPoint3D;
+  col: TAlphaColor;
+  f: TRho3DFace;
+  ok: Boolean;
+
+  // Clips the bar's box to the plot box; False when none of it is inside.
+  function ClipBox(var L, H: TPoint3D): Boolean;
+  var
+    a: Integer;
+    m: Single;
+  begin
+    for a := 0 to 2 do
+    begin
+      m := FFrame.Half[a];
+      if (H.V[a] < -m) or (L.V[a] > m) then
+        Exit(False);
+      L.V[a] := Max(L.V[a], -m);
+      H.V[a] := Min(H.V[a], m);
+    end;
+    Result := True;
+  end;
+
+begin
+  n := S.FRows * S.FCols;
+  SetLength(S.FNorm, 9 * n);
+  SetLength(S.FFaces, 6 * n);
+  S.FPtColor := nil;
+  cnt := 0;
+  hx := S.FBarWidth * BarSpacing(S.FGridX) / 2;
+  hy := S.FBarWidth * BarSpacing(S.FGridY) / 2;
+  for i := 0 to S.FRows - 1 do
+    for j := 0 to S.FCols - 1 do
+    begin
+      b := i * S.FCols + j;
+      base := n + 8 * b;
+      z := S.FSurfZ[i][j];
+      ok := FiniteValue(z) and FiniteValue(S.FGridX[j]) and FiniteValue(S.FGridY[i]);
+      if ok then
+      begin
+        lo := FFrame.Normalize(S.FGridX[j] - hx, S.FGridY[i] - hy, Min(0, z));
+        hi := FFrame.Normalize(S.FGridX[j] + hx, S.FGridY[i] + hy, Max(0, z));
+        if FClip then
+          ok := ClipBox(lo, hi);
+      end;
+      if not ok then
+      begin
+        S.FNorm[b] := NaNPoint3D;
+        for k := 0 to 7 do
+          S.FNorm[base + k] := NaNPoint3D;
+        Continue;
+      end;
+      for k := 0 to 7 do
+      begin
+        if k and 1 <> 0 then p.X := hi.X else p.X := lo.X;
+        if k and 2 <> 0 then p.Y := hi.Y else p.Y := lo.Y;
+        if k and 4 <> 0 then p.Z := hi.Z else p.Z := lo.Z;
+        S.FNorm[base + k] := p;
+      end;
+      p.X := (lo.X + hi.X) / 2;
+      p.Y := (lo.Y + hi.Y) / 2;
+      if z >= 0 then p.Z := hi.Z else p.Z := lo.Z;
+      S.FNorm[b] := p;
+      if S.IsColorMapped then
+        col := MapColor(S, S.ColorValueAt(b))
+      else
+        col := S.FColor;
+      for k := 0 to 5 do
+      begin
+        f.I0 := base + FaceCorners[k, 0];
+        f.I1 := base + FaceCorners[k, 1];
+        f.I2 := base + FaceCorners[k, 2];
+        f.I3 := base + FaceCorners[k, 3];
+        f.Color := col;
+        f.Normal := TPoint3D.Create(FaceNormals[k, 0], FaceNormals[k, 1], FaceNormals[k, 2]);
+        S.FFaces[cnt] := f;
+        Inc(cnt);
+      end;
+    end;
+  SetLength(S.FFaces, cnt);
+  S.FCoarseFaces := S.FFaces;
+end;
+
+// Whether a bar's face is turned towards the viewer (its outward normal
+// points at the eye; for perspective, from the face's centre).
+function TRho3DPlot.FacesViewer(S: TRho3DSeries; const F: TRho3DFace): Boolean;
+var
+  nv, c: TPoint3D;
+begin
+  nv := FCam.RotateVec(F.Normal);
+  if FCam.Projection = ppPerspective then
+  begin
+    // I0 and I2 are opposite corners, so their middle is the face's centre
+    c := FCam.ToView((S.FNorm[F.I0] + S.FNorm[F.I2]) * 0.5);
+    Result := -nv.X * c.X - nv.Y * c.Y + nv.Z * (FCam.Distance - c.Z) > 0;
+  end
+  else
+    Result := nv.Z > 0;
+end;
+
 { ==================================================================== }
 { Per-frame transform and draw list                                     }
 { ==================================================================== }
@@ -1975,7 +2218,7 @@ begin
 
   // head of a revealed curve (interpolated in box space so perspective is right)
   S.FHeadValid := False;
-  if (not S.IsSurface) and (n > 0) then
+  if (S.FKind in [skCurve, skScatter]) and (n > 0) then
   begin
     t := FRevealFraction * (n - 1);
     k := Min(Floor(t), n - 1);
@@ -2072,15 +2315,40 @@ var
     if c > 0 then Result := sum / c else Result := 0;
   end;
 
+var
+  // the view direction: view depth (larger = nearer) of a box point is
+  // toward.X x + toward.Y y + toward.Z z; the eye sits at Distance * toward
+  toward: TPoint3D;
+  horiz, zBase: Single;
+
+  // The sort key of a bar. Bars stand on one plane and never overlap there,
+  // so whole bars drawn far to near, by where they stand, hide each other
+  // correctly; ordering their faces one by one does not (a tall bar's side
+  // can be nearer than a short neighbour's top). Orthographic: the depth of
+  // the bar's foot on the base plane. Perspective: nearer the eye across the
+  // ground is nearer, scaled to roughly match the depths of other items.
+  function BarKey(const P: TPoint3D): Single;
+  begin
+    if FCam.Projection = ppPerspective then
+      Result := (FCam.Distance * horiz - Hypot(P.X - FCam.Distance * toward.X,
+        P.Y - FCam.Distance * toward.Y)) * Max(horiz, 0.05) + toward.Z * zBase
+    else
+      Result := toward.X * P.X + toward.Y * P.Y + toward.Z * zBase;
+  end;
+
 begin
   FItemCount := 0;
   AFaceCount := 0;
   hasFaces := False;
   curves := 0;
+  toward := TPoint3D.Create(FCam.ToView(TPoint3D.Create(1, 0, 0)).Z,
+    FCam.ToView(TPoint3D.Create(0, 1, 0)).Z, FCam.ToView(TPoint3D.Create(0, 0, 1)).Z);
+  horiz := Hypot(toward.X, toward.Y);
+  zBase := EnsureRange(FFrame.NormAxis(2, 0), -FFrame.Half[2], FFrame.Half[2]);
   for s in FSeries do
     if s.FVisible then
     begin
-      if s.IsSurface and (Length(s.FFaces) > 0) then
+      if (s.IsSurface or s.IsBars) and (Length(s.FFaces) > 0) then
         hasFaces := True
       else if (s.FKind = skCurve) and s.FShowLine then
         Inc(curves);
@@ -2091,6 +2359,20 @@ begin
     s := FSeries[si];
     if not s.FVisible then
       Continue;
+    if s.IsBars then
+    begin
+      // one item per bar; its first face's first corner, I0 = n + 8 b, gives
+      // the bar's number b and so its point at the end (centred over its foot)
+      n := s.FRows * s.FCols;
+      fi := 0;
+      while fi < Length(s.FFaces) do
+      begin
+        AddItem(si, dkBar, fi, 6, BarKey(s.FNorm[(s.FFaces[fi].I0 - n) div 8]));
+        Inc(fi, 6);
+      end;
+      Inc(AFaceCount, Length(s.FFaces) div 2);   // three faces of a bar show
+      Continue;
+    end;
     if s.IsSurface then
     begin
       faces := FaceList(s);
@@ -2395,17 +2677,94 @@ var
   k, faceCount: Integer;
   it: TDrawItem;
   s: TRho3DSeries;
-  f: TRho3DFace;
   useBatch: Boolean;
-  c, ec: TAlphaColor;
+  c: TAlphaColor;
   fillPaint, seamPaint, edgePaint, linePaint: ISkPaint;
   pb: ISkPathBuilder;
-  path: ISkPath;
-  p0, p1, p2, p3: TPointF;
   faces: TArray<TRho3DFace>;
   lastFaceSeries: Integer;
   fade: Single;
-  ew: Single;
+
+  // One quad of a surface or a bar: filled, with edges, or as a wireframe.
+  procedure DrawFace(S: TRho3DSeries; const F: TRho3DFace);
+  var
+    c, ec: TAlphaColor;
+    ew: Single;
+    p0, p1, p2, p3: TPointF;
+    path: ISkPath;
+  begin
+    p0 := S.FScr[F.I0]; p1 := S.FScr[F.I1];
+    p2 := S.FScr[F.I2]; p3 := S.FScr[F.I3];
+    c := FaceDrawColor(S, F);
+    if S.FFillMode = fmWireframe then
+    begin
+      if S.IsColorMapped then
+        ec := c
+      else
+        ec := FadeColor(S.FEdgeColor, S.FOpacity);
+      ew := Max(S.FEdgeWidth, 1);
+    end
+    else
+    begin
+      ec := FadeColor(S.FEdgeColor, S.FOpacity);
+      ew := S.FEdgeWidth;
+    end;
+    if useBatch then
+    begin
+      if S.FFillMode <> fmWireframe then
+        BatchQuad(p0, p1, p2, p3, c);
+      if S.FFillMode <> fmFilled then
+      begin
+        ew := Max(ew, 0.8);
+        BatchLine(p0, p1, ew, ec);
+        BatchLine(p1, p2, ew, ec);
+        BatchLine(p2, p3, ew, ec);
+        BatchLine(p3, p0, ew, ec);
+      end;
+    end
+    else
+    begin
+      pb.MoveTo(p0);
+      pb.LineTo(p1);
+      pb.LineTo(p2);
+      pb.LineTo(p3);
+      pb.Close;
+      path := pb.Detach;
+      if S.FFillMode <> fmWireframe then
+      begin
+        fillPaint.Color := c;
+        ACanvas.DrawPath(path, fillPaint);
+        if S.FFillMode = fmFilled then
+        begin
+          // stroke in the face colour to hide antialiasing seams
+          seamPaint.Color := c;
+          ACanvas.DrawPath(path, seamPaint);
+        end;
+      end;
+      if (S.FFillMode <> fmFilled) and (ew > 0) then
+      begin
+        edgePaint.Color := ec;
+        edgePaint.StrokeWidth := ew;
+        ACanvas.DrawPath(path, edgePaint);
+      end;
+    end;
+  end;
+
+  // A bar: the faces turned towards the viewer (they never overlap each
+  // other); a translucent bar shows its far faces through them, first.
+  procedure DrawBar(S: TRho3DSeries; AFirst: Integer);
+  var
+    m: Integer;
+  begin
+    if S.FOpacity < 1 then
+      for m := AFirst to AFirst + 5 do
+        if not FacesViewer(S, S.FFaces[m]) then
+          DrawFace(S, S.FFaces[m]);
+    for m := AFirst to AFirst + 5 do
+      if FacesViewer(S, S.FFaces[m]) then
+        DrawFace(S, S.FFaces[m]);
+  end;
+
 begin
   BuildItems(faceCount);
   if FItemCount = 0 then
@@ -2442,63 +2801,10 @@ begin
             faces := FaceList(s);
             lastFaceSeries := it.Series;
           end;
-          f := faces[it.Index];
-          p0 := s.FScr[f.I0]; p1 := s.FScr[f.I1];
-          p2 := s.FScr[f.I2]; p3 := s.FScr[f.I3];
-          c := FaceDrawColor(s, f);
-          if s.FFillMode = fmWireframe then
-          begin
-            if s.IsColorMapped then
-              ec := c
-            else
-              ec := FadeColor(s.FEdgeColor, s.FOpacity);
-            ew := Max(s.FEdgeWidth, 1);
-          end
-          else
-          begin
-            ec := FadeColor(s.FEdgeColor, s.FOpacity);
-            ew := s.FEdgeWidth;
-          end;
-          if useBatch then
-          begin
-            if s.FFillMode <> fmWireframe then
-              BatchQuad(p0, p1, p2, p3, c);
-            if s.FFillMode <> fmFilled then
-            begin
-              ew := Max(ew, 0.8);
-              BatchLine(p0, p1, ew, ec);
-              BatchLine(p1, p2, ew, ec);
-              BatchLine(p2, p3, ew, ec);
-              BatchLine(p3, p0, ew, ec);
-            end;
-          end
-          else
-          begin
-            pb.MoveTo(p0);
-            pb.LineTo(p1);
-            pb.LineTo(p2);
-            pb.LineTo(p3);
-            pb.Close;
-            path := pb.Detach;
-            if s.FFillMode <> fmWireframe then
-            begin
-              fillPaint.Color := c;
-              ACanvas.DrawPath(path, fillPaint);
-              if s.FFillMode = fmFilled then
-              begin
-                // stroke in the face colour to hide antialiasing seams
-                seamPaint.Color := c;
-                ACanvas.DrawPath(path, seamPaint);
-              end;
-            end;
-            if (s.FFillMode <> fmFilled) and (ew > 0) then
-            begin
-              edgePaint.Color := ec;
-              edgePaint.StrokeWidth := ew;
-              ACanvas.DrawPath(path, edgePaint);
-            end;
-          end;
+          DrawFace(s, faces[it.Index]);
         end;
+      dkBar:
+        DrawBar(s, it.Index);
       dkCurve:
         begin
           FlushBatch(ACanvas);
@@ -2961,7 +3267,7 @@ begin
       if not s.FVisible then
         ACanvas.SaveLayerAlpha(80);
       x := row.Left + Pad;
-      if s.IsSurface then
+      if s.IsSurface or s.IsBars then
       begin
         if s.IsColorMapped then
           for k := 0 to 7 do

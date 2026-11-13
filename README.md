@@ -4,8 +4,9 @@ This control was developed by Herbert Sauro in collaboration with Claude Code, A
 
 An interactive 3D plotting control for RAD Studio **FireMonkey (FMX)**, rendered
 with the **Skia** backend. `TRho3DPlot` draws parametric curves (Lorenz, Rössler
-and Chua attractors), 3D scatter clouds, surfaces `z = f(x, y)` and parametric
-surfaces (tori, spheres, Möbius strips) in one depth-sorted scene that the user
+and Chua attractors), 3D scatter clouds, surfaces `z = f(x, y)`, parametric
+surfaces (tori, spheres, Möbius strips) and 3D bar charts in one depth-sorted
+scene that the user
 can rotate, zoom and pan, with axes, round-number ticks, a colour bar, a legend,
 a property editor, PNG / PDF export and JSON save / load.
 
@@ -85,6 +86,10 @@ S := Plot.AddSurface(GridX, GridY, Zmatrix);    // Z[i][j] at (GridX[j], GridY[i
 S.Opacity := 0.8;
 C := Plot.AddCurve(PX, PY, PZ);
 C.Thickness := 2.5;
+
+// 3D bars: a bar from 0 to Zmatrix[i][j] at (GridX[j], GridY[i])
+B := Plot.AddBars(GridX, GridY, Zmatrix);       // width 0.8 of the grid spacing
+B.ColorMap := cmCoolwarm;                       // heights of both signs
 ```
 
 ## Series
@@ -97,6 +102,7 @@ A plot holds any number of `TRho3DSeries`, of any kinds together.
 | `skScatter` | `AddScatter(X, Y, Z)` | `Points`, optional `SetValues(V)` for colour |
 | `skSurface` | `AddSurface(X, Y, Z)` | `X[j]`, `Y[i]`, `Z[i][j]`; NaN in Z leaves a hole |
 | `skParametricSurface` | `AddParametricSurface(X, Y, Z)` | matrices `X[i][j]`, `Y[i][j]`, `Z[i][j]` |
+| `skBars` | `AddBars(X, Y, Z, Width)` | a bar centred on `(X[j], Y[i])` from 0 to `Z[i][j]`, down for a negative height; NaN leaves no bar |
 
 Per-series style: `Color`, `Thickness`, `UseGradient` (+ start / end colours),
 `ShowLine`, `ShowPoints`, `PointSize`, `MarkerShape` (circle, square, diamond,
@@ -105,8 +111,18 @@ triangle, cross), `Opacity` (0..1), `ColorMap`, `ColorByValue`, `FillMode`
 `Shaded` (flat Lambert lighting), `Visible`, `ShowInLegend`, `Title`.
 
 After editing `Points` directly, call `Series.Changed`. `PointAt(i)` returns a
-point's data coordinates (surfaces: `i = row * Cols + col`); `ValueAt(i)` its
-colour value.
+point's data coordinates (surfaces and bars: `i = row * Cols + col`, for a bar
+the end it reaches); `ValueAt(i)` its colour value.
+
+**Bars.** `BarWidth` (0..1, default 0.8) is each bar's width as a fraction of the
+grid spacing: the smallest gap between neighbouring `X` values, and `Y` values
+(1 for a single row or column). Bars are coloured by height through `ColorMap`
+(or by `SetValues(C)`, or in `Color` with `ColorByValue` off), shaded and
+outlined by default (`AddBars` turns `Shaded` on). They are depth-sorted as whole
+boxes, by where they stand, and each is drawn as its faces turned towards the
+viewer, so bars hide each other correctly from every direction, including from
+below; sorting their faces one by one would not. A translucent bar shows its far
+faces through its near ones. The axis box covers each bar's whole width and 0.
 
 The plot-level "master" properties (`LineColor`, `LineThickness`, `UseGradient`,
 gradient colours, `ShowLines`, `ShowPoints`, `PointSize`) apply to **every**
